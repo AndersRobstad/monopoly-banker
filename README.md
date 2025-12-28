@@ -4,26 +4,29 @@ A simple Svelte 5 application for managing money in a Monopoly game.
 
 ## Features
 
-- **6 Players**: Manage up to 6 players with customizable names
-- **Give $2M to All**: One-click button to give 2 million to all players
-- **Add/Withdraw Money**: Easy management of individual player funds
-- **Transfer Money**: Transfer funds between any two players
+- **Dynamic players (min 2)**: Add/remove players with unique IDs; names editable
+- **Per-player $2M**: Quick button to give a single player $2M (passing GO)
+- **Add/Withdraw**: Manage individual balances with formatted inputs
+- **Transfers**: Move money between players with validation
+- **History**: Logs all transactions (adds, withdraws, transfers, player changes)
+- **Persistence**: State saved in `localStorage`
+- **New game/reset**: Three-dot menu to start a new game (set start balance) or fully reset
 
 ## Getting Started
 
-1. Install dependencies:
+1) Install dependencies:
 ```bash
 npm install
 ```
 
-2. Start the development server:
+2) Start the development server:
 ```bash
 npm run dev
 ```
 
-3. Open your browser to the URL shown in the terminal (usually `http://localhost:5173`)
+3) Open your browser to the URL shown in the terminal (usually `http://localhost:5173`)
 
-## Build for Production
+## Build for Production (local)
 
 ```bash
 npm run build
@@ -31,10 +34,23 @@ npm run build
 
 The built files will be in the `dist` directory.
 
-## Usage
+## Deploy to Vercel
 
-- Click "Give $2M to All Players" to give each player 2 million dollars
-- Click "Manage" on any player card to add or withdraw money
-- Use the transfer section at the bottom to move money between players
-- Player names can be edited by clicking on the name field
+1) Install the Vercel CLI (if not already):
+```bash
+npm install -g vercel
+```
+
+2) Deploy (from project root):
+```bash
+vercel        # first time to link project
+vercel --prod # production deployment
+```
+
+Vercel uses `vercel.json`:
+- `buildCommand`: `npm run build`
+- `outputDirectory`: `dist`
+- `framework`: `vite`
+
+Alternatively, use the Vercel dashboard, import the repo, set `Build Command` to `npm run build`, and `Output Directory` to `dist`.
 
