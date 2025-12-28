@@ -2,6 +2,8 @@
 
 A simple Svelte 5 application for managing money in a Monopoly game.
 
+<img width="1226" height="638" alt="image" src="https://github.com/user-attachments/assets/182cdb1f-041e-4406-9430-a91541523f97" />
+
 ## Features
 
 - **Dynamic players (min 2)**: Add/remove players with unique IDs; names editable
