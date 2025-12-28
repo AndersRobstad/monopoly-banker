@@ -41,8 +41,8 @@
   let transferAmountDisplay = $state('');
   let newGameAmount = $state(0);
   let newGameAmountDisplay = $state('');
-  let menuOpen = $state(false);
   let showNewGameModal = $state(false);
+  let showHistory = $state(false);
 
   // Save state to localStorage
   function saveState() {
@@ -260,22 +260,12 @@
     selectedPlayer = null;
     transferFrom = null;
     transferTo = null;
-    menuOpen = false;
     showNewGameModal = false;
     saveState();
   }
 
-  function toggleMenu() {
-    menuOpen = !menuOpen;
-  }
-
-  function closeMenu() {
-    menuOpen = false;
-  }
-
   function openNewGameModal() {
     showNewGameModal = true;
-    menuOpen = false;
     newGameAmount = 0;
     newGameAmountDisplay = '';
   }
@@ -291,6 +281,10 @@
     }
   }
 
+  function toggleHistory() {
+    showHistory = !showHistory;
+  }
+
   // Format amount for display
   function getFormattedAmount(value) {
     if (value === 0 || value === '') return '';
@@ -299,27 +293,57 @@
 
   function formatTime(timestamp) {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString();
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDate(timestamp) {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return formatTime(timestamp);
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + formatTime(timestamp);
   }
 
   function getTransactionDescription(transaction) {
     switch (transaction.type) {
       case 'transfer':
-        return `${displayName(transaction.fromPlayerId, transaction.fromPlayerName)} transferred $${formatMoney(transaction.amount)} to ${displayName(transaction.toPlayerId, transaction.toPlayerName)}`;
+        return `${displayName(transaction.fromPlayerId, transaction.fromPlayerName)} → ${displayName(transaction.toPlayerId, transaction.toPlayerName)}`;
       case 'add_money':
-        return `Added $${formatMoney(transaction.amount)} to ${displayName(transaction.playerId, transaction.playerName)}`;
+        return `Added to ${displayName(transaction.playerId, transaction.playerName)}`;
       case 'withdraw_money':
-        return `${displayName(transaction.playerId, transaction.playerName)} withdrew $${formatMoney(transaction.amount)}`;
+        return `${displayName(transaction.playerId, transaction.playerName)} withdrew`;
       case 'give_2m':
-        return `Gave $2M to ${displayName(transaction.playerId, transaction.playerName)} (passed GO)`;
+        return `${displayName(transaction.playerId, transaction.playerName)} passed GO`;
       case 'give_2m_all':
-        return `Gave $2M to ${displayName(transaction.playerId, transaction.playerName)} (all players)`;
+        return `All players received $2M`;
       case 'player_added':
-        return `Added player: ${transaction.playerName}`;
+        return `${transaction.playerName} joined`;
       case 'player_removed':
-        return `Removed player: ${transaction.playerName}`;
+        return `${transaction.playerName} left`;
       default:
-        return 'Unknown transaction';
+        return 'Unknown';
+    }
+  }
+
+  function getTransactionIcon(transaction) {
+    switch (transaction.type) {
+      case 'transfer':
+        return '↔️';
+      case 'add_money':
+        return '➕';
+      case 'withdraw_money':
+        return '➖';
+      case 'give_2m':
+        return '🎯';
+      case 'player_added':
+        return '👤';
+      case 'player_removed':
+        return '👋';
+      default:
+        return '💰';
     }
   }
 
@@ -331,163 +355,212 @@
   });
 </script>
 
-<div class="container">
-  <div class="header">
-    <h1>🏦 Monopoly Banker</h1>
-    <div class="menu-wrapper">
-      <button class="icon-button" onclick={toggleMenu} aria-label="Menu">
-        ⋮
-      </button>
-      {#if menuOpen}
-        <div class="menu-dropdown">
-          <button class="menu-item" onclick={() => { addPlayer(); closeMenu(); }}>
-            + Add Player
-          </button>
-          <button class="menu-item" onclick={openNewGameModal}>
-            Start New Game
-          </button>
-          <button class="menu-item danger" onclick={resetGame}>
-            Reset Game (clear all)
-          </button>
-        </div>
-      {/if}
+<div class="app">
+  <header class="header">
+    <div class="header-content">
+      <h1 class="logo">
+        <span class="logo-icon">🏦</span>
+        <span class="logo-text">Monopoly Banker</span>
+      </h1>
+      <div class="header-actions">
+        <button class="header-btn" onclick={addPlayer} title="Add a new player">
+          <span class="btn-icon">➕</span>
+          <span class="btn-label">Add Player</span>
+        </button>
+        <button class="header-btn primary" onclick={openNewGameModal} title="Start a new game">
+          <span class="btn-icon">🎮</span>
+          <span class="btn-label">New Game</span>
+        </button>
+        <button class="header-btn danger" onclick={resetGame} title="Reset everything">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-label">Reset</span>
+        </button>
+        <div class="divider"></div>
+        <button class="history-toggle" onclick={toggleHistory}>
+          <span class="icon">📊</span>
+          <span>History</span>
+          {#if transactions.length > 0}
+            <span class="badge">{transactions.length}</span>
+          {/if}
+        </button>
+      </div>
     </div>
-  </div>
+  </header>
 
-  <div class="players-grid">
-    {#each players as player (player.id)}
-      <div class="player-card">
-        <div class="player-header">
-          <div class="player-name-row">
-            <input
-              type="text"
-              bind:value={player.name}
-              class="player-name"
-            />
-            {#if players.length > 2}
-              <button
-                class="btn-remove"
-                onclick={() => removePlayer(player.id)}
-                title="Remove player"
-              >
-                ×
-              </button>
-            {/if}
-          </div>
-          <div class="player-money">${formatMoney(player.money)}</div>
-        </div>
-        
-        <div class="player-actions">
-          <button
-            class="btn btn-primary btn-small"
-            onclick={() => givePlayer2M(player.id)}
-          >
-            Give $2M
-          </button>
-          <button
-            class="btn btn-small"
-            onclick={() => selectedPlayer = selectedPlayer === player.id ? null : player.id}
-          >
-            {selectedPlayer === player.id ? 'Cancel' : 'Manage'}
-          </button>
-        </div>
+  <div class="main-content">
+    <div class="primary-section">
+      <div class="players-section">
+        <h2 class="section-title">Players</h2>
+        <div class="players-grid">
+          {#each players as player (player.id)}
+            <div class="player-card" class:expanded={selectedPlayer === player.id}>
+              <div class="player-info">
+                <div class="player-name-row">
+                  <input
+                    type="text"
+                    bind:value={player.name}
+                    class="player-name-input"
+                    placeholder="Player name"
+                  />
+                  {#if players.length > 2}
+                    <button
+                      class="remove-btn"
+                      onclick={() => removePlayer(player.id)}
+                      title="Remove player"
+                    >
+                      ×
+                    </button>
+                  {/if}
+                </div>
+                <div class="player-balance">
+                  <span class="currency">$</span>
+                  <span class="amount">{formatMoney(player.money)}</span>
+                </div>
+              </div>
 
-        {#if selectedPlayer === player.id}
-          <div class="manage-panel">
-            <input
-              type="text"
-              value={amountDisplay}
-              oninput={handleAmountInput}
-              onblur={handleAmountBlur}
-              placeholder="Amount (e.g., 1000000)"
-              class="input"
-            />
-            {#if amount > 0}
-              <div class="amount-preview">${formatMoney(amount)}</div>
-            {/if}
-            <div class="button-group">
-              <button
-                class="btn btn-success btn-small"
-                onclick={() => addMoney(player.id)}
-              >
-                Add
-              </button>
-              <button
-                class="btn btn-danger btn-small"
-                onclick={() => withdrawMoney(player.id)}
-              >
-                Withdraw
-              </button>
+              <div class="player-quick-actions">
+                <button
+                  class="quick-action pass-go"
+                  onclick={() => givePlayer2M(player.id)}
+                  title="Passed GO - receive $2M"
+                >
+                  <span class="action-icon">🎯</span>
+                  <span class="action-label">Pass GO</span>
+                </button>
+                <button
+                  class="quick-action manage"
+                  onclick={() => selectedPlayer = selectedPlayer === player.id ? null : player.id}
+                >
+                  <span class="action-icon">{selectedPlayer === player.id ? '✕' : '⚙️'}</span>
+                  <span class="action-label">{selectedPlayer === player.id ? 'Close' : 'Manage'}</span>
+                </button>
+              </div>
+
+              {#if selectedPlayer === player.id}
+                <div class="manage-section">
+                  <div class="manage-input-group">
+                    <input
+                      type="text"
+                      value={amountDisplay}
+                      oninput={handleAmountInput}
+                      onblur={handleAmountBlur}
+                      placeholder="Enter amount"
+                      class="manage-input"
+                    />
+                    {#if amount > 0}
+                      <div class="input-preview">${formatMoney(amount)}</div>
+                    {/if}
+                  </div>
+                  <div class="manage-actions">
+                    <button
+                      class="manage-btn add"
+                      onclick={() => addMoney(player.id)}
+                      disabled={amount <= 0}
+                    >
+                      ➕ Add
+                    </button>
+                    <button
+                      class="manage-btn withdraw"
+                      onclick={() => withdrawMoney(player.id)}
+                      disabled={amount <= 0 || player.money < amount}
+                    >
+                      ➖ Withdraw
+                    </button>
+                  </div>
+                </div>
+              {/if}
             </div>
-          </div>
-        {/if}
-      </div>
-    {/each}
-  </div>
-
-  <div class="transfer-section">
-    <h2>Transfer Money</h2>
-    <div class="transfer-controls">
-      <div class="transfer-field">
-        <label for="transfer-from">From:</label>
-        <select id="transfer-from" bind:value={transferFrom} class="select">
-          <option value={null}>Select player</option>
-          {#each players as player}
-            <option value={player.id}>{player.name}</option>
           {/each}
-        </select>
+        </div>
       </div>
-      
-      <div class="transfer-field">
-        <label for="transfer-to">To:</label>
-        <select id="transfer-to" bind:value={transferTo} class="select">
-          <option value={null}>Select player</option>
-          {#each players as player}
-            <option value={player.id}>{player.name}</option>
-          {/each}
-        </select>
-      </div>
-      
-      <div class="transfer-field">
-        <label for="transfer-amount">Amount:</label>
-        <input
-          id="transfer-amount"
-          type="text"
-          value={transferAmountDisplay}
-          oninput={handleTransferAmountInput}
-          onblur={handleTransferAmountBlur}
-          placeholder="Amount (e.g., 1000000)"
-          class="input"
-        />
-        {#if transferAmount > 0}
-          <div class="amount-preview">${formatMoney(transferAmount)}</div>
-        {/if}
-      </div>
-      
-      <button
-        class="btn btn-primary"
-        onclick={transfer}
-        disabled={!transferFrom || !transferTo || transferAmount <= 0 || transferFrom === transferTo}
-      >
-        Transfer
-      </button>
-    </div>
-  </div>
 
-  <div class="history-section">
-    <h2>Transaction History</h2>
-    <div class="history-list">
-      {#if transactions.length === 0}
-        <div class="history-empty">No transactions yet</div>
-      {:else}
-        {#each transactions as transaction (transaction.id)}
-          <div class="history-item">
-            <div class="history-time">{formatTime(transaction.timestamp)}</div>
-            <div class="history-description">{getTransactionDescription(transaction)}</div>
+      <div class="transfer-section">
+        <h2 class="section-title">Transfer Money</h2>
+        <div class="transfer-card">
+          <div class="transfer-form">
+            <div class="transfer-field">
+              <label for="from-player">From</label>
+              <select id="from-player" bind:value={transferFrom} class="transfer-select">
+                <option value={null}>Select player</option>
+                {#each players as player}
+                  <option value={player.id}>{player.name}</option>
+                {/each}
+              </select>
+            </div>
+
+            <div class="transfer-arrow">→</div>
+
+            <div class="transfer-field">
+              <label for="to-player">To</label>
+              <select id="to-player" bind:value={transferTo} class="transfer-select">
+                <option value={null}>Select player</option>
+                {#each players as player}
+                  <option value={player.id}>{player.name}</option>
+                {/each}
+              </select>
+            </div>
+
+            <div class="transfer-field amount-field">
+              <label for="transfer-amount">Amount</label>
+              <input
+                id="transfer-amount"
+                type="text"
+                value={transferAmountDisplay}
+                oninput={handleTransferAmountInput}
+                onblur={handleTransferAmountBlur}
+                placeholder="Enter amount"
+                class="transfer-input"
+              />
+              {#if transferAmount > 0}
+                <div class="input-preview">${formatMoney(transferAmount)}</div>
+              {/if}
+            </div>
+
+            <button
+              class="transfer-btn"
+              onclick={transfer}
+              disabled={!transferFrom || !transferTo || transferAmount <= 0 || transferFrom === transferTo}
+            >
+              Transfer Money
+            </button>
           </div>
-        {/each}
-      {/if}
+        </div>
+      </div>
     </div>
+
+    {#if showHistory}
+      <aside class="history-sidebar">
+        <div class="history-header">
+          <h2 class="section-title">History</h2>
+          <button class="close-history" onclick={toggleHistory}>✕</button>
+        </div>
+        <div class="history-content">
+          {#if transactions.length === 0}
+            <div class="history-empty">
+              <div class="empty-icon">📋</div>
+              <p>No transactions yet</p>
+            </div>
+          {:else}
+            <div class="history-list">
+              {#each transactions as transaction (transaction.id)}
+                <div class="history-item">
+                  <div class="history-icon">{getTransactionIcon(transaction)}</div>
+                  <div class="history-details">
+                    <div class="history-description">{getTransactionDescription(transaction)}</div>
+                    <div class="history-meta">
+                      <span class="history-time">{formatDate(transaction.timestamp)}</span>
+                      {#if transaction.amount}
+                        <span class="history-amount">${formatMoney(transaction.amount)}</span>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </aside>
+    {/if}
   </div>
 
   {#if showNewGameModal}
@@ -497,26 +570,33 @@
       tabindex="0"
       onclick={closeNewGameModal}
       onkeydown={handleBackdropKeydown}
-      aria-label="Close new game dialog"
+      aria-label="Close modal"
     ></div>
     <div class="modal">
-      <h3>Start New Game</h3>
-      <p>Set the starting balance for every player. This will clear the history.</p>
-      <input
-        type="text"
-        value={newGameAmountDisplay}
-        oninput={handleNewGameAmountInput}
-        onblur={handleNewGameAmountBlur}
-        placeholder="Start amount (e.g., 1500000)"
-        class="input"
-      />
-      {#if newGameAmount > 0}
-        <div class="amount-preview">Each player starts with ${formatMoney(newGameAmount)}</div>
-      {/if}
-      <div class="modal-actions">
-        <button class="btn btn-small" onclick={closeNewGameModal}>Cancel</button>
-        <button class="btn btn-primary btn-small" onclick={startNewGame} disabled={newGameAmount <= 0}>
-          Start New Game
+      <div class="modal-header">
+        <h3>Start New Game</h3>
+        <button class="modal-close" onclick={closeNewGameModal}>✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Set the starting balance for all players. This will clear transaction history.</p>
+        <div class="modal-input-group">
+          <input
+            type="text"
+            value={newGameAmountDisplay}
+            oninput={handleNewGameAmountInput}
+            onblur={handleNewGameAmountBlur}
+            placeholder="e.g., 1500000"
+            class="modal-input"
+          />
+          {#if newGameAmount > 0}
+            <div class="input-preview">Each player: ${formatMoney(newGameAmount)}</div>
+          {/if}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn cancel" onclick={closeNewGameModal}>Cancel</button>
+        <button class="modal-btn confirm" onclick={startNewGame} disabled={newGameAmount <= 0}>
+          Start Game
         </button>
       </div>
     </div>
@@ -524,358 +604,672 @@
 </div>
 
 <style>
-  * {
+  :global(*) {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
   }
 
   :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
     min-height: 100vh;
-    padding: 20px;
-    margin: 0;
+    color: #e4e4e7;
+    overflow-x: hidden;
   }
 
-  .container {
-    max-width: 1200px;
-    margin: 0 auto;
+  .app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
 
-  h1 {
-    color: white;
-    margin: 0;
-    font-size: 2.3rem;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-  }
-
-  h2 {
-    color: white;
-    margin-bottom: 20px;
-    font-size: 1.5rem;
-  }
-
+  /* Header */
   .header {
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1.25rem 1.5rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 30px;
   }
 
-  .btn {
-    padding: 12px 24px;
-    font-size: 1rem;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.2s;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-
-  .btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-primary {
-    background: #4CAF50;
-    color: white;
-  }
-
-  .btn-success {
-    background: #2196F3;
-    color: white;
-  }
-
-  .btn-danger {
-    background: #f44336;
-    color: white;
-  }
-
-  .icon-button {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    border: none;
-    background: white;
-    color: #444;
-    font-size: 22px;
-    font-weight: 700;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+  .logo {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 0.75rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
   }
 
-  .icon-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  .logo-icon {
+    font-size: 1.8rem;
   }
 
-  .menu-wrapper {
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+
+  .header-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: #e4e4e7;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .header-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+  }
+
+  .header-btn.primary {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #93c5fd;
+  }
+
+  .header-btn.primary:hover {
+    background: rgba(59, 130, 246, 0.25);
+  }
+
+  .header-btn.danger {
+    background: rgba(248, 113, 113, 0.12);
+    border-color: rgba(248, 113, 113, 0.25);
+    color: #fca5a5;
+  }
+
+  .header-btn.danger:hover {
+    background: rgba(248, 113, 113, 0.2);
+  }
+
+  .btn-icon {
+    font-size: 1rem;
+  }
+
+  .btn-label {
+    font-size: 0.875rem;
+  }
+
+  @media (max-width: 768px) {
+    .header-btn .btn-label {
+      display: none;
+    }
+
+    .header-btn {
+      padding: 0.625rem;
+      min-width: 40px;
+      justify-content: center;
+    }
+
+    .btn-icon {
+      font-size: 1.125rem;
+    }
+
+    .divider {
+      display: none;
+    }
+
+    .history-toggle span:not(.icon):not(.badge) {
+      display: none;
+    }
+  }
+
+  .divider {
+    width: 1px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 0 0.25rem;
+  }
+
+  .history-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: #e4e4e7;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
     position: relative;
   }
 
-  .menu-dropdown {
-    position: absolute;
-    right: 0;
-    top: 48px;
-    background: white;
+  .history-toggle:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+  }
+
+  .history-toggle .icon {
+    font-size: 1.1rem;
+  }
+
+  .badge {
+    background: #3b82f6;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.125rem 0.4rem;
     border-radius: 10px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
-    min-width: 180px;
-    padding: 6px 0;
-    z-index: 10;
+    min-width: 1.25rem;
+    text-align: center;
   }
 
-  .menu-item {
+  /* Main Content */
+  .main-content {
+    flex: 1;
+    max-width: 1400px;
     width: 100%;
-    background: transparent;
-    border: none;
-    text-align: left;
-    padding: 10px 14px;
-    font-size: 0.95rem;
-    cursor: pointer;
-    transition: background 0.15s, padding-left 0.15s;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
   }
 
-  .menu-item:hover {
-    background: #f3f6ff;
-    padding-left: 18px;
+  /* Sections */
+  .section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 1.25rem;
   }
 
-  .menu-item.danger {
-    color: #d32f2f;
-  }
-
-  .menu-item.danger:hover {
-    background: #fff2f2;
-  }
-
-  .btn-small {
-    padding: 8px 16px;
-    font-size: 0.9rem;
+  .players-section {
+    margin-bottom: 2rem;
   }
 
   .players-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-    margin-bottom: 40px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
   }
 
   .player-card {
-    background: white;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 1.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .player-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.15);
   }
 
-  .player-header {
-    margin-bottom: 15px;
+  .player-card.expanded {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+
+  .player-info {
+    margin-bottom: 1.25rem;
   }
 
   .player-name-row {
     display: flex;
-    gap: 8px;
+    gap: 0.5rem;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 1rem;
   }
 
-  .player-name {
+  .player-name-input {
     flex: 1;
-    padding: 8px;
-    font-size: 1.1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 0.625rem 0.875rem;
+    font-size: 1rem;
     font-weight: 600;
-    border: 2px solid #e0e0e0;
-    border-radius: 6px;
+    color: #fff;
+    transition: all 0.2s;
   }
 
-  .player-name:focus {
+  .player-name-input:focus {
     outline: none;
-    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 
-  .btn-remove {
+  .remove-btn {
     width: 32px;
     height: 32px;
     border: none;
-    background: #f44336;
-    color: white;
-    border-radius: 50%;
+    background: rgba(248, 113, 113, 0.15);
+    color: #f87171;
+    border-radius: 8px;
+    font-size: 1.25rem;
+    font-weight: 600;
     cursor: pointer;
-    font-size: 20px;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     transition: all 0.2s;
     flex-shrink: 0;
   }
 
-  .btn-remove:hover {
-    background: #d32f2f;
-    transform: scale(1.1);
+  .remove-btn:hover {
+    background: rgba(248, 113, 113, 0.25);
+    transform: scale(1.05);
   }
 
-  .player-money {
-    font-size: 1.8rem;
-    font-weight: bold;
-    color: #4CAF50;
+  .player-balance {
     text-align: center;
-  }
-
-  .player-actions {
-    margin-bottom: 10px;
-    display: flex;
-    gap: 10px;
-  }
-
-  .player-actions .btn {
-    flex: 1;
-  }
-
-  .manage-panel {
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 2px solid #e0e0e0;
-  }
-
-  .input {
-    width: 100%;
-    padding: 10px;
-    font-size: 1rem;
-    border: 2px solid #e0e0e0;
-    border-radius: 6px;
-    margin-bottom: 10px;
-  }
-
-  .input:focus {
-    outline: none;
-    border-color: #667eea;
-  }
-
-  .amount-preview {
-    font-size: 0.9rem;
-    color: #4CAF50;
-    font-weight: 600;
-    margin-top: 5px;
-    margin-bottom: 10px;
-    text-align: center;
-  }
-
-  .button-group {
-    display: flex;
-    gap: 10px;
-  }
-
-  .button-group .btn {
-    flex: 1;
-  }
-
-  .transfer-section {
-    background: white;
+    padding: 1rem;
+    background: rgba(34, 197, 94, 0.08);
     border-radius: 12px;
-    padding: 30px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    margin-bottom: 30px;
   }
 
-  .transfer-controls {
+  .currency {
+    font-size: 1.25rem;
+    color: #86efac;
+    font-weight: 500;
+  }
+
+  .amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #4ade80;
+    margin-left: 0.25rem;
+  }
+
+  .player-quick-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  .quick-action {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: #e4e4e7;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .quick-action:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .quick-action.pass-go {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+
+  .quick-action.pass-go:hover {
+    background: rgba(59, 130, 246, 0.2);
+  }
+
+  .action-icon {
+    font-size: 1.1rem;
+  }
+
+  .action-label {
+    font-size: 0.85rem;
+  }
+
+  .manage-section {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    animation: slideIn 0.2s ease;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .manage-input-group {
+    margin-bottom: 1rem;
+  }
+
+  .manage-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    color: #fff;
+    transition: all 0.2s;
+  }
+
+  .manage-input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  .input-preview {
+    margin-top: 0.5rem;
+    text-align: center;
+    font-size: 0.9rem;
+    color: #4ade80;
+    font-weight: 600;
+  }
+
+  .manage-actions {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .manage-btn {
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .manage-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .manage-btn.add {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+
+  .manage-btn.add:not(:disabled):hover {
+    background: rgba(34, 197, 94, 0.25);
+    transform: translateY(-2px);
+  }
+
+  .manage-btn.withdraw {
+    background: rgba(248, 113, 113, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(248, 113, 113, 0.3);
+  }
+
+  .manage-btn.withdraw:not(:disabled):hover {
+    background: rgba(248, 113, 113, 0.25);
+    transform: translateY(-2px);
+  }
+
+  /* Transfer Section */
+  .transfer-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 2rem;
+  }
+
+  .transfer-form {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr 1.5fr auto;
+    gap: 1rem;
     align-items: end;
+  }
+
+  @media (max-width: 968px) {
+    .transfer-form {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    .transfer-arrow {
+      display: none;
+    }
   }
 
   .transfer-field {
     display: flex;
     flex-direction: column;
+    gap: 0.5rem;
   }
 
   .transfer-field label {
-    margin-bottom: 8px;
+    font-size: 0.875rem;
     font-weight: 600;
-    color: #333;
+    color: #a1a1aa;
   }
 
-  .select {
-    padding: 10px;
-    font-size: 1rem;
-    border: 2px solid #e0e0e0;
-    border-radius: 6px;
-    background: white;
-  }
-
-  .select:focus {
-    outline: none;
-    border-color: #667eea;
-  }
-
-  .history-section {
-    background: white;
-    border-radius: 12px;
-    padding: 30px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
-
-  .history-list {
-    max-height: 400px;
-    overflow-y: auto;
-    border: 2px solid #e0e0e0;
+  .transfer-select,
+  .transfer-input {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 8px;
-    padding: 10px;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    color: #fff;
+    transition: all 0.2s;
+  }
+
+  .transfer-select:focus,
+  .transfer-input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  .transfer-arrow {
+    font-size: 1.5rem;
+    color: #a1a1aa;
+    padding-bottom: 0.75rem;
+  }
+
+  .transfer-btn {
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  }
+
+  .transfer-btn:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+  }
+
+  .transfer-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* History Sidebar */
+  .history-sidebar {
+    position: fixed;
+    right: 0;
+    top: 0;
+    height: 100vh;
+    width: 380px;
+    background: rgba(20, 20, 30, 0.98);
+    backdrop-filter: blur(12px);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
+    z-index: 110;
+    display: flex;
+    flex-direction: column;
+    animation: slideInRight 0.3s ease;
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .history-sidebar {
+      width: 100%;
+    }
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .close-history {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e4e4e7;
+    border-radius: 8px;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .close-history:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .history-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
   }
 
   .history-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 4rem 2rem;
     text-align: center;
-    color: #999;
-    padding: 20px;
+    color: #71717a;
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    opacity: 0.5;
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
   }
 
   .history-item {
-    padding: 12px;
-    border-bottom: 1px solid #e0e0e0;
     display: flex;
-    gap: 15px;
-    align-items: center;
+    gap: 0.875rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    transition: all 0.2s;
   }
 
-  .history-item:last-child {
-    border-bottom: none;
+  .history-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.12);
   }
 
-  .history-time {
-    font-size: 0.85rem;
-    color: #666;
-    min-width: 80px;
+  .history-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .history-details {
+    flex: 1;
+    min-width: 0;
   }
 
   .history-description {
-    flex: 1;
-    color: #333;
+    font-size: 0.95rem;
+    color: #e4e4e7;
+    margin-bottom: 0.375rem;
+    line-height: 1.4;
   }
 
+  .history-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .history-time {
+    color: #71717a;
+  }
+
+  .history-amount {
+    color: #4ade80;
+    font-weight: 600;
+  }
+
+  /* Modal */
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    z-index: 20;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   .modal {
@@ -883,29 +1277,129 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: white;
-    padding: 24px;
-    border-radius: 12px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
-    width: min(420px, 90vw);
-    z-index: 30;
+    background: rgba(30, 30, 46, 0.98);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+    width: min(460px, 92vw);
+    z-index: 210;
+    animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .modal h3 {
-    margin-bottom: 10px;
-    color: #222;
+  @keyframes modalSlideIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -48%) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
   }
 
-  .modal p {
-    margin-bottom: 14px;
-    color: #444;
-    line-height: 1.4;
-  }
-
-  .modal-actions {
+  .modal-header {
     display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    margin-top: 12px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .modal-header h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .modal-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e4e4e7;
+    border-radius: 6px;
+    font-size: 1.125rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .modal-close:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .modal-body {
+    padding: 1.5rem;
+  }
+
+  .modal-body p {
+    color: #a1a1aa;
+    line-height: 1.6;
+    margin-bottom: 1.25rem;
+  }
+
+  .modal-input-group {
+    margin-bottom: 1rem;
+  }
+
+  .modal-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    font-size: 1rem;
+    color: #fff;
+    transition: all 0.2s;
+  }
+
+  .modal-input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  .modal-footer {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .modal-btn {
+    flex: 1;
+    padding: 0.875rem 1.5rem;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .modal-btn.cancel {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e4e4e7;
+  }
+
+  .modal-btn.cancel:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .modal-btn.confirm {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  }
+
+  .modal-btn.confirm:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+  }
+
+  .modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>
