@@ -1,6 +1,4 @@
-# Monopoly Banker
-
-[Link](https://www.monopoly-banker-eight.vercel.app)
+# [Monopoly Banker](https://monopoly-banker-eight.vercel.app/)
 
 A simple Svelte 5 application for managing money in a Monopoly game.
 
